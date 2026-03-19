@@ -1,9 +1,17 @@
 # Personal configuration files (contain emails, tokens, etc.)
-skill/teammates.yaml
-skill/exec-brief.yaml
+teammates.yaml
+exec-brief.yaml
 
-# Python cache
+# Python cache (legacy)
 skill/__pycache__
 
 # Generated briefs
-skill/exec-brief-*.md
+exec-brief-*.md
+*.html
+
+# Go build artifacts
+executive-brief
+exec-brief
+dist/
+go.sum
+daily-teammate-brief.md

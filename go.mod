@@ -1,0 +1,10 @@
+module github.com/grokspawn/executive-brief
+
+go 1.21
+
+require (
+	github.com/google/go-github/v60 v60.0.0
+	gopkg.in/yaml.v3 v3.0.1
+)
+
+require github.com/google/go-querystring v1.1.0 // indirect
