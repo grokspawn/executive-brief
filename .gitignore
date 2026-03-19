@@ -1,0 +1,9 @@
+# Personal configuration files (contain emails, tokens, etc.)
+skill/teammates.yaml
+skill/exec-brief.yaml
+
+# Python cache
+skill/__pycache__
+
+# Generated briefs
+skill/exec-brief-*.md

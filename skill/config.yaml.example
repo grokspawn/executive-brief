@@ -1,0 +1,166 @@
+# Example exec-brief.yaml configuration
+# Copy this to exec-brief.yaml and customize
+# This file is OPTIONAL - defaults work without it
+
+sources:
+  jira:
+    enabled: true
+    server: https://jira.example.com
+
+    # Optional: Specific projects to monitor
+    # If omitted, uses default queries across all accessible projects
+    projects:
+      - OCPBUGS
+      - CNTRLPLANE
+
+    # Optional: Custom JQL filters
+    # If omitted, uses sensible defaults (assigned to you, reported by you, watching)
+    jql_filters:
+      - "assignee = currentUser() AND updated >= startOfDay(-1)"
+      - "reporter = currentUser() AND updated >= startOfDay(-1)"
+      - "priority in (Blocker, Critical) AND status != Closed"
+      - "project = OCPBUGS AND component = 'Networking' AND status in (New, 'In Progress')"
+
+    # Optional: Dashboard URLs for team-level visibility
+    # The skill will extract filters from the dashboard
+    dashboards:
+      - url: https://jira.example.com/secure/Dashboard.jspa?selectPageId=12345
+        name: "Team Dashboard"
+        description: "Main team tracking dashboard"
+
+      - url: https://jira.example.com/secure/Dashboard.jspa?selectPageId=67890
+        name: "Release Dashboard"
+        description: "Release blocker tracking"
+
+    # Optional: Agile board URLs for sprint/backlog tracking
+    boards:
+      - url: https://jira.example.com/secure/RapidBoard.jspa?rapidView=1234
+        name: "Team Sprint Board"
+        description: "Current sprint work"
+
+      - url: https://jira.example.com/secure/RapidBoard.jspa?rapidView=5678
+        name: "Platform Board"
+        description: "Platform-wide initiatives"
+
+  github:
+    enabled: true
+
+    # Organizations to monitor
+    organizations:
+      - openshift
+      - kubernetes
+      - operator-framework
+
+    # Repositories to specifically track (optional)
+    # If omitted, tracks all repos in the organizations
+    repositories:
+      - openshift/origin
+      - openshift/installer
+      - kubernetes/kubernetes
+
+    # What to include in the brief
+    filters:
+      review_requested: true   # PRs requesting your review
+      mentioned: true          # Issues/PRs mentioning you
+      team_prs: true          # PRs from teammates
+      assigned: true          # Issues assigned to you
+      authored: true          # Your open PRs/issues
+
+    # Check CI status for PRs
+    check_ci: true
+
+  google_docs:
+    enabled: false  # Disabled by default
+
+    # Specific folders to monitor
+    folders:
+      - "Team Documents"
+      - "Project Plans"
+      - "Meeting Notes"
+
+    # Track unresolved comments
+    track_comments: true
+
+    # Only track documents you have edit access to
+    editable_only: false
+
+  slack:
+    enabled: false  # Not yet implemented
+
+    # Channels to monitor
+    channels:
+      - team-general
+      - engineering
+      - alerts
+
+    # Track DMs and mentions
+    track_dms: true
+    track_mentions: true
+
+# Matrix categorization rules
+matrix_rules:
+  # Keywords that indicate urgency
+  urgent_keywords:
+    - blocker
+    - critical
+    - urgent
+    - emergency
+    - production
+    - down
+    - failing
+    - outage
+    - incident
+
+  # Keywords that indicate importance
+  important_keywords:
+    - feature
+    - security
+    - performance
+    - teammate
+    - strategic
+    - okr
+    - milestone
+    - cve
+
+  # Time-based rules
+  time_based:
+    urgent_within_days: 2    # Items due within this are considered urgent
+    important_within_days: 7  # Items due within this are considered important
+
+  # Custom quadrant rules (advanced)
+  # You can override the default scoring for specific patterns
+  custom_rules:
+    # Example: All CVEs go to Q1
+    - pattern: "CVE-\\d{4}-\\d+"
+      quadrant: 1
+
+    # Example: Documentation PRs go to Q2 unless critical
+    - pattern: "\\[docs?\\]"
+      quadrant: 2
+      unless_contains: ["critical", "blocker"]
+
+# Output preferences
+output:
+  # Show these emojis for different item types
+  emojis:
+    blocker: "🔥"
+    security: "🔒"
+    feature: "⭐"
+    bug: "🐛"
+    documentation: "📝"
+    teammate: "👥"
+    waiting: "⏰"
+
+  # Group items by this field within each quadrant
+  # Options: source, priority, teammate, none
+  group_by: teammate
+
+  # Sort items within groups
+  # Options: urgency, importance, updated, created
+  sort_by: urgency
+
+  # Maximum items to show per quadrant
+  max_per_quadrant: 20
+
+  # Show score breakdowns (for debugging categorization)
+  show_scores: false

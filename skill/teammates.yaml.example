@@ -1,0 +1,65 @@
+# Example teammates.yaml configuration
+# Copy this to teammates.yaml and customize with your information
+
+# Your identity across platforms
+user:
+  name: Sam Taylor
+  github: staylor
+  jira: sam.taylor@company.com
+  email: sam.taylor@company.com
+  slack: staylor
+  timezone: America/New_York  # Your home timezone for --daily calculations
+
+# Your teammates to prioritize in the executive brief
+teammates:
+  # Teammate with all identifiers
+  - name: Alice Smith
+    github: asmith
+    jira: alice.smith@company.com
+    email: alice.smith@company.com
+    slack: asmith
+    priority: high
+    notes: "Team lead - prioritize their requests"
+
+  # Teammate with Slack UID and handle
+  - name: Bob Jones
+    github: bjones
+    jira: bob.jones@company.com
+    email: bob.jones@company.com
+    slack:
+      uid: U87654321
+      handle: bjones
+    priority: high
+    notes: "Direct collaborator on Project X"
+
+  # Teammate with only Slack handle
+  - name: Charlie Davis
+    github: cdavis
+    jira: charlie.davis@company.com
+    email: charlie.davis@company.com
+    slack:
+      handle: cdavis
+    priority: medium
+
+  # Teammate with only Slack UID
+  - name: Dana Lee
+    github: dlee
+    jira: dana.lee@company.com
+    email: dana.lee@company.com
+    slack:
+      uid: U11223344
+    priority: medium
+    notes: "Works in different timezone"
+
+  # Teammate with minimal info (just GitHub and Jira)
+  - name: Eve Martinez
+    github: emartinez
+    jira: eve.martinez@company.com
+    priority: low
+
+# Priority levels affect how prominently teammate items are displayed:
+# - high: Always shown first in each quadrant
+# - medium: Standard priority
+# - low: Still tracked but less prominent
+
+# Notes field is optional and for your reference only
