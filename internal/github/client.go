@@ -3,12 +3,60 @@ package github
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/go-github/v60/github"
 	"github.com/grokspawn/executive-brief/internal/config"
 	"github.com/grokspawn/executive-brief/internal/matrix"
+	"golang.org/x/oauth2"
 )
+
+// newClient creates an authenticated GitHub client using GITHUB_TOKEN
+func newClient(ctx context.Context) *github.Client {
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		// Return unauthenticated client if no token
+		return github.NewClient(nil)
+	}
+
+	// Create OAuth2 token source
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: token},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+	return github.NewClient(tc)
+}
+
+// ValidateAuth validates GitHub authentication
+func ValidateAuth() error {
+	ctx := context.Background()
+	client := newClient(ctx)
+
+	// Test authentication
+	_, resp, err := client.Users.Get(ctx, "")
+	if err != nil && resp != nil && resp.StatusCode == 401 {
+		return fmt.Errorf(`GitHub authentication failed
+
+To fix, choose one option:
+
+Option 1 - Use gh CLI (recommended):
+  gh auth login
+
+Option 2 - Set GITHUB_TOKEN environment variable:
+  1. Create a Personal Access Token at: https://github.com/settings/tokens
+  2. Required scopes: repo, read:user
+  3. Set the environment variable:
+
+     export GITHUB_TOKEN=ghp_your_token_here
+
+  Or add to shell profile (~/.bashrc, ~/.zshrc):
+     echo 'export GITHUB_TOKEN=ghp_your_token_here' >> ~/.bashrc
+
+The GitHub client will automatically use gh CLI credentials or GITHUB_TOKEN.`)
+	}
+	return nil
+}
 
 // Query queries GitHub for PRs and issues
 func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, error) {
@@ -16,9 +64,8 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 		return nil, nil
 	}
 
-	// Create GitHub client (uses GITHUB_TOKEN env var or gh CLI auth)
-	client := github.NewClient(nil)
 	ctx := context.Background()
+	client := newClient(ctx)
 
 	var items []matrix.Item
 	filters := cfg.Sources.GitHub.Filters
@@ -33,7 +80,9 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 		if err == nil {
 			for _, pr := range prs {
 				if pr.UpdatedAt.After(startTime) && pr.UpdatedAt.Before(endTime) {
-					items = append(items, normalizeIssue(pr, "review_requested"))
+					item := normalizeIssue(pr, "review_requested")
+					item.TeammatesInvolved = identifyGitHubTeammates(item, cfg)
+					items = append(items, item)
 				}
 			}
 		}
@@ -52,7 +101,9 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 			}
 			for _, pr := range prs {
 				if pr.UpdatedAt.After(startTime) && pr.UpdatedAt.Before(endTime) {
-					items = append(items, normalizeIssue(pr, "teammate_pr"))
+					item := normalizeIssue(pr, "teammate_pr")
+					item.TeammatesInvolved = identifyGitHubTeammates(item, cfg)
+					items = append(items, item)
 				}
 			}
 		}
@@ -65,7 +116,9 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 		if err == nil {
 			for _, issue := range issues {
 				if issue.UpdatedAt.After(startTime) && issue.UpdatedAt.Before(endTime) {
-					items = append(items, normalizeIssue(issue, "mentioned"))
+					item := normalizeIssue(issue, "mentioned")
+					item.TeammatesInvolved = identifyGitHubTeammates(item, cfg)
+					items = append(items, item)
 				}
 			}
 		}
@@ -78,7 +131,9 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 		if err == nil {
 			for _, pr := range prs {
 				if pr.UpdatedAt.After(startTime) && pr.UpdatedAt.Before(endTime) {
-					items = append(items, normalizeIssue(pr, "authored"))
+					item := normalizeIssue(pr, "authored")
+					item.TeammatesInvolved = identifyGitHubTeammates(item, cfg)
+					items = append(items, item)
 				}
 			}
 		}
@@ -91,13 +146,34 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 		if err == nil {
 			for _, issue := range issues {
 				if issue.UpdatedAt.After(startTime) && issue.UpdatedAt.Before(endTime) {
-					items = append(items, normalizeIssue(issue, "assigned"))
+					item := normalizeIssue(issue, "assigned")
+					item.TeammatesInvolved = identifyGitHubTeammates(item, cfg)
+					items = append(items, item)
 				}
 			}
 		}
 	}
 
 	return items, nil
+}
+
+// identifyGitHubTeammates identifies teammates based on GitHub usernames
+func identifyGitHubTeammates(item matrix.Item, cfg *config.Config) []string {
+	teammates := make(map[string]bool)
+
+	for _, tm := range cfg.Teammates {
+		if tm.GitHub != "" {
+			if item.Author == tm.GitHub || item.Assignee == tm.GitHub {
+				teammates[tm.Name] = true
+			}
+		}
+	}
+
+	result := make([]string, 0, len(teammates))
+	for name := range teammates {
+		result = append(result, name)
+	}
+	return result
 }
 
 // searchIssues searches for issues/PRs using GitHub Search API

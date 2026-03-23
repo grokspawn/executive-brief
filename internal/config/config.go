@@ -48,7 +48,23 @@ type SlackInfo struct {
 type Sources struct {
 	Jira       JiraSource   `yaml:"jira"`
 	GitHub     GitHubSource `yaml:"github"`
+	Slack      SlackSource  `yaml:"slack"`
 	GoogleDocs GoogleDocs   `yaml:"google_docs"`
+}
+
+// SlackSource represents Slack configuration
+type SlackSource struct {
+	Enabled          bool     `yaml:"enabled"`
+	TokenSource      string   `yaml:"token_source"`    // "env" or "file"
+	TokenEnvVar      string   `yaml:"token_env_var"`   // Environment variable for token (default: SLACK_XOXC_TOKEN)
+	TokenFile        string   `yaml:"token_file"`      // File path for token
+	CookieEnvVar     string   `yaml:"cookie_env_var"`  // Environment variable for cookie (default: SLACK_XOXD_TOKEN, required for xoxc- tokens)
+	UserAgentEnvVar  string   `yaml:"user_agent_env_var"` // Environment variable for user-agent (default: SLACK_USER_AGENT, required for xoxc- tokens)
+	Channels         []string `yaml:"channels"`
+	IncludeDMs       bool     `yaml:"include_dms"`
+	IncludeMentions  bool     `yaml:"include_mentions"`
+	IncludeThreads   bool     `yaml:"include_threads"`
+	MinReactionCount int      `yaml:"min_reaction_count"`
 }
 
 // JiraSource represents Jira configuration
@@ -149,6 +165,15 @@ func Load(teammatesPath, sourcesPath string) (*Config, error) {
 					Assigned:        true,
 					Authored:        true,
 				},
+			},
+			Slack: SlackSource{
+				Enabled:          true,
+				TokenSource:      "env",
+				TokenEnvVar:      "SLACK_XOXC_TOKEN",
+				IncludeDMs:       true,
+				IncludeMentions:  true,
+				IncludeThreads:   true,
+				MinReactionCount: 2,
 			},
 		},
 		MatrixRules: MatrixRules{

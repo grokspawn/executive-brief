@@ -227,8 +227,11 @@ executive-brief/
 - Go 1.21+ (for building)
 
 **Optional (for data sources):**
-- **Jira:** API token configured (see Jira client implementation)
-- **GitHub:** `gh` CLI installed and authenticated
+- **Jira:** `JIRA_API_TOKEN` environment variable
+- **GitHub:** `GITHUB_TOKEN` environment variable or `gh` CLI authenticated
+- **Slack:** `SLACK_XOXC_TOKEN` environment variable
+
+See [AUTHENTICATION.md](AUTHENTICATION.md) for detailed setup instructions.
 
 ## Installation
 

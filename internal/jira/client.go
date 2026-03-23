@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/grokspawn/executive-brief/internal/config"
@@ -121,7 +120,7 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 	}
 
 	// Load API token
-	apiToken, err := loadAPIToken()
+	apiToken, err := LoadAPIToken()
 	if err != nil {
 		return nil, fmt.Errorf("error loading Jira API token: %w", err)
 	}
@@ -158,7 +157,9 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 		return nil, err
 	}
 	for _, issue := range result.Issues {
-		items = append(items, normalizeIssue(issue, server))
+		item := normalizeIssue(issue, server)
+		item.TeammatesInvolved = identifyJiraTeammates(item, cfg)
+		items = append(items, item)
 	}
 
 	// Execute custom JQL filters if configured
@@ -170,7 +171,9 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 			continue
 		}
 		for _, issue := range result.Issues {
-			items = append(items, normalizeIssue(issue, server))
+			item := normalizeIssue(issue, server)
+			item.TeammatesInvolved = identifyJiraTeammates(item, cfg)
+			items = append(items, item)
 		}
 	}
 
@@ -184,11 +187,32 @@ func Query(cfg *config.Config, startTime, endTime time.Time) ([]matrix.Item, err
 			continue
 		}
 		for _, issue := range result.Issues {
-			items = append(items, normalizeIssue(issue, server))
+			item := normalizeIssue(issue, server)
+			item.TeammatesInvolved = identifyJiraTeammates(item, cfg)
+			items = append(items, item)
 		}
 	}
 
 	return items, nil
+}
+
+// identifyJiraTeammates identifies teammates based on Jira email addresses
+func identifyJiraTeammates(item matrix.Item, cfg *config.Config) []string {
+	teammates := make(map[string]bool)
+
+	for _, tm := range cfg.Teammates {
+		if tm.Jira != "" {
+			if item.Assignee == tm.Jira || item.Reporter == tm.Jira {
+				teammates[tm.Name] = true
+			}
+		}
+	}
+
+	result := make([]string, 0, len(teammates))
+	for name := range teammates {
+		result = append(result, name)
+	}
+	return result
 }
 
 // normalizeIssue converts a Jira issue to a matrix.Item
@@ -243,45 +267,23 @@ func normalizeIssue(issue Issue, server string) matrix.Item {
 	return item
 }
 
-// loadAPIToken loads the Jira API token from ~/.claude.json
-func loadAPIToken() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting home directory: %w", err)
-	}
+// LoadAPIToken loads the Jira API token from environment variable
+func LoadAPIToken() (string, error) {
+	token := os.Getenv("JIRA_API_TOKEN")
+	if token == "" {
+		return "", fmt.Errorf(`Jira authentication failed: JIRA_API_TOKEN environment variable not set
 
-	claudePath := filepath.Join(home, ".claude.json")
-	data, err := os.ReadFile(claudePath)
-	if err != nil {
-		return "", fmt.Errorf("error reading ~/.claude.json: %w", err)
-	}
+To fix:
+1. Create a Jira API token at: https://id.atlassian.com/manage-profile/security/api-tokens
+2. Set the environment variable:
 
-	var claudeConfig map[string]interface{}
-	if err := json.Unmarshal(data, &claudeConfig); err != nil {
-		return "", fmt.Errorf("error parsing ~/.claude.json: %w", err)
-	}
+   export JIRA_API_TOKEN=your-token-here
 
-	// Navigate to mcpServers.atlassian.env.JIRA_API_TOKEN
-	mcpServers, ok := claudeConfig["mcpServers"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("mcpServers not found in ~/.claude.json")
-	}
+Or add to your shell profile (~/.bashrc, ~/.zshrc):
+   echo 'export JIRA_API_TOKEN=your-token-here' >> ~/.bashrc
 
-	atlassian, ok := mcpServers["atlassian"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("mcpServers.atlassian not found in ~/.claude.json")
+Note: Use your email address and API token for authentication, not your password.`)
 	}
-
-	env, ok := atlassian["env"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("mcpServers.atlassian.env not found in ~/.claude.json")
-	}
-
-	token, ok := env["JIRA_API_TOKEN"].(string)
-	if !ok || token == "" {
-		return "", fmt.Errorf("JIRA_API_TOKEN not found in ~/.claude.json")
-	}
-
 	return token, nil
 }
 

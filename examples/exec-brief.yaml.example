@@ -85,17 +85,44 @@ sources:
     editable_only: false
 
   slack:
-    enabled: false  # Not yet implemented
+    enabled: true
 
-    # Channels to monitor
+    # Authentication - supports both bot tokens (xoxb-) and user tokens (xoxc-)
+    # Bot tokens: Only need the token (recommended, get from https://api.slack.com/apps)
+    # User tokens: Need token + cookie + user-agent (extract from browser)
+
+    token_source: env                    # Options: "env" or "file"
+    token_env_var: SLACK_XOXC_TOKEN       # Used when token_source is "env"
+    # token_file: ~/.slack-token         # Uncomment and use when token_source is "file"
+
+    # For user tokens (xoxc-) - extract from browser while logged into Slack:
+    # 1. Token: DevTools > Application > Cookies > slack.com > token (starts with xoxc-)
+    # 2. Cookie: DevTools > Application > Cookies > slack.com > d (starts with xoxd-)
+    # 3. User-Agent: DevTools > Network > any request > Headers > User-Agent
+    #
+    # Set environment variables:
+    #   export SLACK_XOXC_TOKEN='xoxc-...'
+    #   export SLACK_XOXD_TOKEN='xoxd-...'
+    #   export SLACK_USER_AGENT='Mozilla/5.0 (Macintosh; ...) ...'
+    #
+    # WARNING: User tokens may be revoked by Slack if user-agent doesn't match your browser
+
+    # Optional: Customize env var names (defaults: SLACK_XOXD_TOKEN, SLACK_USER_AGENT)
+    # cookie_env_var: SLACK_XOXD_TOKEN
+    # user_agent_env_var: SLACK_USER_AGENT
+
+    # Channels to monitor (by name or ID)
     channels:
       - team-general
       - engineering
       - alerts
+      # - C12345ABC  # Can also use channel IDs
 
-    # Track DMs and mentions
-    track_dms: true
-    track_mentions: true
+    # What to include
+    include_dms: true           # Include direct messages
+    include_mentions: true      # Include messages mentioning you
+    include_threads: true       # Include threads you're participating in
+    min_reaction_count: 2       # Highlight messages with this many reactions or more
 
 # Matrix categorization rules
 matrix_rules:

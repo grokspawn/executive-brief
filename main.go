@@ -12,6 +12,8 @@ import (
 	"github.com/grokspawn/executive-brief/internal/jira"
 	"github.com/grokspawn/executive-brief/internal/matrix"
 	"github.com/grokspawn/executive-brief/internal/output"
+	"github.com/grokspawn/executive-brief/internal/slack"
+	"github.com/grokspawn/executive-brief/internal/source"
 )
 
 func main() {
@@ -27,10 +29,42 @@ func main() {
 
 	flag.Parse()
 
+	// Validate flags
+	if *format != "markdown" && *format != "html" {
+		fmt.Fprintf(os.Stderr, "Invalid format '%s'. Use 'markdown' or 'html'\n", *format)
+		os.Exit(1)
+	}
+
+	if *date != "" {
+		if _, err := time.Parse("2006-01-02", *date); err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid date format '%s'. Use YYYY-MM-DD\n", *date)
+			os.Exit(1)
+		}
+	}
+
 	// Load configuration
 	cfg, err := config.Load(*configPath, *sourceConfigPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create source registry and register all sources
+	registry := source.NewRegistry()
+	registry.Register(&jira.JiraSource{})
+	registry.Register(&github.GitHubSource{})
+	registry.Register(&slack.SlackSource{})
+
+	// Determine which sources to query
+	enabledSources, err := parseEnabledSources(*sources, cfg, registry)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Validate all enabled sources before proceeding
+	if err := registry.ValidateAll(cfg, enabledSources); err != nil {
+		fmt.Fprintf(os.Stderr, "Validation failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -39,11 +73,8 @@ func main() {
 	if *daily {
 		startTime, endTime = calculateDailyRange(cfg.User.Timezone)
 	} else if *date != "" {
-		t, err := time.Parse("2006-01-02", *date)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid date format '%s'. Use YYYY-MM-DD\n", *date)
-			os.Exit(1)
-		}
+		// Date already validated above
+		t, _ := time.Parse("2006-01-02", *date)
 		startTime = t
 		endTime = t.Add(24 * time.Hour)
 	} else {
@@ -52,33 +83,10 @@ func main() {
 		startTime = endTime.Add(-24 * time.Hour)
 	}
 
-	// Determine which sources to query
-	enabledSources := parseEnabledSources(*sources, cfg)
-
-	// Collect items from all sources
-	var items []matrix.Item
-
-	if enabledSources["jira"] {
-		jiraItems, err := jira.Query(cfg, startTime, endTime)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Could not query Jira: %v\n", err)
-		} else {
-			items = append(items, jiraItems...)
-		}
-	}
-
-	if enabledSources["github"] {
-		githubItems, err := github.Query(cfg, startTime, endTime)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Could not query GitHub: %v\n", err)
-		} else {
-			items = append(items, githubItems...)
-		}
-	}
-
-	// Identify teammate involvement
-	for i := range items {
-		items[i].TeammatesInvolved = identifyTeammates(&items[i], cfg)
+	// Collect items from all sources (teammates already identified by each source)
+	items, err := registry.QueryAll(cfg, startTime, endTime, enabledSources)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Error querying sources: %v\n", err)
 	}
 
 	// Filter teammates-only if requested
@@ -157,49 +165,40 @@ func calculateDailyRange(userTimezone string) (time.Time, time.Time) {
 }
 
 // parseEnabledSources determines which sources to query
-func parseEnabledSources(sourcesFlag string, cfg *config.Config) map[string]bool {
-	enabled := make(map[string]bool)
+// Returns the intersection of requested sources and registered sources
+func parseEnabledSources(sourcesFlag string, cfg *config.Config, registry *source.Registry) (map[string]bool, error) {
+	// Get all registered sources
+	registered := make(map[string]bool)
+	for _, name := range registry.ListRegistered() {
+		registered[name] = true
+	}
+
+	var requested map[string]bool
 
 	if sourcesFlag != "" {
-		// Use explicit list
+		// Use explicit list from flag
+		requested = make(map[string]bool)
 		for _, src := range strings.Split(sourcesFlag, ",") {
-			enabled[strings.TrimSpace(src)] = true
+			name := strings.TrimSpace(src)
+			if name != "" {
+				// Validate that the source is registered
+				if !registered[name] {
+					return nil, fmt.Errorf("unknown source '%s'. Available sources: %s",
+						name, strings.Join(registry.ListRegistered(), ", "))
+				}
+				requested[name] = true
+			}
 		}
 	} else {
-		// Use config defaults
-		if cfg.Sources.Jira.Enabled {
-			enabled["jira"] = true
-		}
-		if cfg.Sources.GitHub.Enabled {
-			enabled["github"] = true
-		}
-	}
-
-	return enabled
-}
-
-// identifyTeammates identifies which teammates are involved in an item
-func identifyTeammates(item *matrix.Item, cfg *config.Config) []string {
-	teammates := make(map[string]bool)
-
-	for _, tm := range cfg.Teammates {
-		switch item.Source {
-		case "jira":
-			// Check assignee and reporter
-			if item.Assignee == tm.Jira || item.Reporter == tm.Jira {
-				teammates[tm.Name] = true
-			}
-		case "github":
-			// Check author
-			if item.Author == tm.GitHub {
-				teammates[tm.Name] = true
+		// Use config defaults - sources that are both registered AND enabled in config
+		requested = make(map[string]bool)
+		for name := range registered {
+			src, ok := registry.Get(name)
+			if ok && src.Enabled(cfg) {
+				requested[name] = true
 			}
 		}
 	}
 
-	result := make([]string, 0, len(teammates))
-	for name := range teammates {
-		result = append(result, name)
-	}
-	return result
+	return requested, nil
 }
